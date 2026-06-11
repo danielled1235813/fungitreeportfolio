@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c \"import folium, requests; print\\('ok'\\)\")",
+      "Bash(.venv/bin/python script2_map_trees.py)",
+      "Bash(open /Users/danielledubov/belowground/trees_map.html)",
+      "WebSearch",
+      "WebFetch(domain:data.cityofnewyork.us)",
+      "WebFetch(domain:help.openstreetmap.org)",
+      "WebFetch(domain:catalog.data.gov)",
+      "WebFetch(domain:tree-map.nycgovparks.org)",
+      "WebFetch(domain:docs.google.com)",
+      "WebFetch(domain:www.inaturalist.org)",
+      "WebFetch(domain:www.openstreetmap.org)",
+      "WebFetch(domain:api.inaturalist.org)",
+      "WebFetch(domain:nominatim.openstreetmap.org)",
+      "WebFetch(domain:overpass-api.de)",
+      "WebFetch(domain:api.gbif.org)",
+      "WebFetch(domain:thecitylife.org)",
+      "WebFetch(domain:www.nycgovparks.org)",
+      "WebFetch(domain:www.prospectpark.org)",
+      "WebFetch(domain:prospectparkny.treekeepersoftware.com)",
+      "WebFetch(domain:viewing.nyc)",
+      "Bash(.venv/bin/python script3_combined_trees.py)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(curl -s 'https://data.cityofnewyork.us/resource/hn5i-inap.json?%24limit=1')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d[0].keys\\(\\)\\) if isinstance\\(d,list\\) else d\\)\")",
+      "Bash(curl -s \"https://data.cityofnewyork.us/resource/hn5i-inap.json?%24limit=3&%24where=within_box\\(location%2C40.656%2C-73.978%2C40.683%2C-73.955\\)\")",
+      "Bash(python3 -c \"import sys,json; print\\(json.dumps\\(json.load\\(sys.stdin\\)[:1], indent=2\\)\\)\")",
+      "Bash(open /Users/danielledubov/belowground/trees_combined_map.html)",
+      "Bash(python3)",
+      "WebFetch(domain:link.springer.com)"
+    ]
+  }
+}
