@@ -30,7 +30,10 @@
       "Bash(python3 -c \"import sys,json; print\\(json.dumps\\(json.load\\(sys.stdin\\)[:1], indent=2\\)\\)\")",
       "Bash(open /Users/danielledubov/belowground/trees_combined_map.html)",
       "Bash(python3)",
-      "WebFetch(domain:link.springer.com)"
+      "WebFetch(domain:link.springer.com)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('belowground_combined.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(.venv/bin/python -c \"import folium, scipy, numpy, pandas; print\\('all deps OK'\\)\")"
     ]
   }
 }

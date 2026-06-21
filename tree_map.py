@@ -84,6 +84,7 @@ def _fetch_window(park_name: str, bounds: dict, d1: str, d2: str) -> tuple[list[
                 "observer_login":        (obs.get("user") or {}).get("login"),
                 "url":                   obs.get("uri"),
                 "photo_url":             _first_photo(obs),
+                "positional_accuracy":   obs.get("positional_accuracy"),
             })
 
         fetched = (page - 1) * 200 + len(results)
