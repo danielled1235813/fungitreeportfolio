@@ -8,50 +8,38 @@
 <!--
 =====================================================================
   BELOWGROUND NETWORK EXPLORER
-  Summary of updates (most recent rebuild)
+  Summary of updates
 =====================================================================
 
-  This page used to merge three maps into a single combined layer.
-  It now keeps them separate and lets you switch between them.
-
-  What changed in this rebuild:
-
   1. MAP TOGGLES
-     The three source maps are no longer combined. A mutually
-     exclusive segmented control (three buttons) switches between:
+     A mutually exclusive segmented control (three buttons) switches
+     between:
         Button 1  ->  map1_suitability.html
         Button 2  ->  map2_fungal_network.html
         Button 3  ->  map3_tree_network.html
-     Only one map is ever shown at a time.
+     Only one map is shown at a time.
 
   2. MARQUEE ZOOM
-     Click and drag (hold and drag) anywhere on the active map to
-     draw a selection rectangle. Releasing the mouse zooms the map
-     to the selected area. No modifier key is required.
+     The map is fully interactive by default: drag to pan, scroll or
+     use plus and minus to zoom. A floating zoom toolbar sits over the
+     top-right of the map. Click the box-select icon to arm marquee
+     zoom, then drag a rectangle. Click the reset icon to reload the
+     map to its starting extent.
 
   3. INFO POPOVERS
      Small info buttons sit next to the Trees and Fungi labels.
-     Clicking one opens a popover describing where the data comes
-     from. The text lives in the clearly marked EDIT BLOCK below so
-     it is easy to find and change.
+     Clicking one opens a popover with data source details and a
+     direct link to the original dataset. Edit the EDIT BLOCK below
+     to update the text.
 
-  4. METADATA CLARITY
-     The origin years for the tree census data and the fungal
-     observation data are shown directly in the popovers and in the
-     metadata strip under the controls.
+  4. METADATA STRIP
+     Origin years for tree census data and fungal observations are
+     shown under the controls, along with the fungal network count.
 
-  5. GOAL VISIBILITY
-     A visible "Slash Goal" statement at the top states the primary
-     function of this view. Click permissions are kept minimal: the
-     only interactions are the toggle buttons, the info buttons, and
-     the marquee zoom.
-
-  6. NETWORK CALCULATION
-     A connected components algorithm counts how many distinct
-     fungal networks exist in the fungal map. It reads the edges
-     drawn on map2, builds a graph, and counts connected graphs
-     using a union find structure. The result is shown in the
-     metadata strip once the fungal map source has loaded.
+  5. NETWORK CALCULATION
+     A connected components algorithm (union find) counts distinct
+     fungal networks from edges drawn on map2. Result shown in the
+     metadata strip.
 
   Constraint honored: no em dashes anywhere in this file.
 =====================================================================
@@ -77,29 +65,16 @@
   }
 
   header {
-    padding: 16px 20px 12px;
+    padding: 14px 20px 10px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
   }
-
-  .slash-goal {
-    display: inline-block;
-    background: var(--accent-soft);
-    border-left: 4px solid var(--accent);
-    padding: 8px 14px;
-    border-radius: 4px;
-    font-size: 14px;
-    line-height: 1.4;
-  }
-
-  .slash-goal strong { color: var(--accent); }
 
   .controls {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 14px;
-    margin-top: 14px;
   }
 
   .segmented {
@@ -144,22 +119,24 @@
     font-weight: 700;
     cursor: pointer;
     line-height: 1;
+    padding: 0;
   }
 
   .info-btn:hover { background: var(--accent-soft); }
 
   .metadata {
-    margin-top: 12px;
+    margin-top: 10px;
     font-size: 13px;
     color: #46564a;
   }
 
   .metadata span { margin-right: 18px; }
 
+  /* Map area */
   .map-stage {
     position: relative;
     width: 100%;
-    height: calc(100vh - 210px);
+    height: calc(100vh - 180px);
     min-height: 420px;
   }
 
@@ -174,13 +151,21 @@
 
   .map-stage iframe.active { display: block; }
 
-  /* Marquee overlay sits on top of the active map and captures the drag. */
+  /*
+    Marquee overlay: pointer-events none by default so the map works
+    normally. Armed class enables capture for one box drag.
+  */
   .marquee-overlay {
     position: absolute;
     inset: 0;
-    cursor: crosshair;
     z-index: 5;
     background: transparent;
+    pointer-events: none;
+  }
+
+  .marquee-overlay.armed {
+    pointer-events: auto;
+    cursor: crosshair;
   }
 
   .marquee-box {
@@ -189,6 +174,42 @@
     background: rgba(46, 125, 50, 0.15);
     pointer-events: none;
     display: none;
+  }
+
+  /* Floating zoom toolbar: top-right corner of the map */
+  .zoom-toolbar {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .zoom-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    line-height: 1;
+    padding: 0;
+  }
+
+  .zoom-icon-btn:hover { background: var(--accent-soft); }
+
+  .zoom-icon-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
   }
 
   .marquee-hint {
@@ -202,6 +223,7 @@
     padding: 6px 10px;
     font-size: 12px;
     color: #46564a;
+    max-width: 320px;
   }
 
   /* Popover */
@@ -220,7 +242,8 @@
   }
 
   .popover h4 { margin: 0 0 6px; color: var(--accent); font-size: 14px; }
-  .popover .years { font-weight: 600; }
+  .popover .years { font-weight: 600; margin-bottom: 6px; }
+  .popover a { color: var(--accent); }
   .popover .close {
     position: absolute;
     top: 6px;
@@ -234,15 +257,7 @@
 <body>
 
 <header>
-  <!-- SLASH GOAL: primary function of this view -->
-  <div class="slash-goal">
-    <strong>Slash Goal:</strong> Switch between three belowground maps to
-    explore where fungi and trees overlap, and to see how individual fungal
-    observations connect into larger underground networks.
-  </div>
-
   <div class="controls">
-    <!-- Mutually exclusive segmented control. One map at a time. -->
     <div class="segmented" id="segmented">
       <button data-map="suitability" class="active">Suitability</button>
       <button data-map="fungal">Fungal Network</button>
@@ -275,10 +290,22 @@
   <div class="marquee-overlay" id="overlay">
     <div class="marquee-box" id="marqueeBox"></div>
   </div>
-  <div class="marquee-hint">Click and drag to zoom into an area.</div>
+
+  <!-- Floating zoom toolbar: separate from the map toggle buttons -->
+  <div class="zoom-toolbar">
+    <button class="zoom-icon-btn" id="zoomTool" title="Zoom to area: click then drag a box">
+      &#x26F6;
+    </button>
+    <button class="zoom-icon-btn" id="resetView" title="Reset view">
+      &#x21BA;
+    </button>
+  </div>
+
+  <div class="marquee-hint" id="hint">
+    Drag to pan. Scroll or use +/- to zoom. Click the box icon above to zoom to an area.
+  </div>
 </div>
 
-<!-- Popover container, content injected from the EDIT BLOCK below. -->
 <div class="popover" id="popover">
   <span class="close" id="popoverClose">&times;</span>
   <div id="popoverBody"></div>
@@ -286,38 +313,40 @@
 
 <script>
 /* =====================================================================
-   EDIT BLOCK: data source descriptions and origin years
+   EDIT BLOCK: data source descriptions, years, and source links
    ---------------------------------------------------------------------
-   Change the text and years here. These values feed both the info
-   popovers and the metadata strip under the controls.
+   Update this block to change popover content and the metadata strip.
    ===================================================================== */
 const DATA_INFO = {
   trees: {
     title: "Tree census data",
     years: "2015 to 2016",
+    source: "https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh",
+    sourceLabel: "NYC Open Data: 2015 Street Tree Census",
     body:
-      "Tree locations and species come from the NYC Street Tree Census. " +
-      "Each point is a surveyed street tree with a recorded species and " +
-      "trunk diameter. The tree network map links nearby trees that can " +
-      "share the same belowground fungal partners."
+      "Tree locations and species come from the NYC Street Tree Census " +
+      "(2015-2016). Each point is a surveyed street tree with a recorded " +
+      "species and trunk diameter. The tree network map links nearby trees " +
+      "that can share the same belowground fungal partners."
   },
   fungi: {
     title: "Fungal observation data",
     years: "2010 to 2023",
+    source: "https://www.inaturalist.org/observations?place_id=674&taxon_id=47169",
+    sourceLabel: "iNaturalist: Fungal observations in New York",
     body:
-      "Fungal points come from community mushroom observations recorded " +
-      "with date and coordinates. Edges connect observations that are " +
-      "close enough to plausibly belong to the same underground network. " +
+      "Fungal points come from community mushroom observations on iNaturalist " +
+      "(2010-2023), recorded with date and GPS coordinates. Edges connect " +
+      "observations close enough to plausibly share the same underground network. " +
       "The suitability map estimates where conditions favor these fungi."
   }
 };
 /* ===================== END EDIT BLOCK ============================== */
 
-/* ---- Wire metadata strip from the edit block ---- */
 document.getElementById("meta-tree-years").textContent = DATA_INFO.trees.years;
 document.getElementById("meta-fungi-years").textContent = DATA_INFO.fungi.years;
 
-/* ---- Map toggle: mutually exclusive segmented control ---- */
+/* ---- Mutually exclusive map toggle ---- */
 const frames = {
   suitability: document.getElementById("frame-suitability"),
   fungal: document.getElementById("frame-fungal"),
@@ -330,10 +359,8 @@ let activeKey = "suitability";
 segmented.addEventListener("click", function (event) {
   const button = event.target.closest("button[data-map]");
   if (!button) return;
-
   const key = button.dataset.map;
   if (key === activeKey) return;
-
   for (const b of segmented.querySelectorAll("button")) {
     b.classList.toggle("active", b === button);
   }
@@ -343,7 +370,7 @@ segmented.addEventListener("click", function (event) {
   activeKey = key;
 });
 
-/* ---- Reach into a Folium iframe and return its Leaflet map ---- */
+/* ---- Reach into a Folium iframe to get its Leaflet map object ---- */
 function getLeafletMap(frame) {
   try {
     const win = frame.contentWindow;
@@ -354,20 +381,46 @@ function getLeafletMap(frame) {
         return value;
       }
     }
-  } catch (err) {
-    /* Cross origin or not loaded yet. Returns null and we skip zoom. */
-  }
+  } catch (err) { /* cross-origin or not loaded yet */ }
   return null;
 }
 
-/* ---- Marquee zoom over the active map ---- */
+/* ---- Marquee zoom: arms for one box drag, then disarms ---- */
 const overlay = document.getElementById("overlay");
 const marqueeBox = document.getElementById("marqueeBox");
+const zoomTool = document.getElementById("zoomTool");
+const hint = document.getElementById("hint");
+
+const HINT_IDLE = "Drag to pan. Scroll or use +/- to zoom. Click the box icon above to zoom to an area.";
+const HINT_ARMED = "Click and drag a box on the map to zoom into it.";
+
 let dragging = false;
 let startX = 0;
 let startY = 0;
 
+function setArmed(on) {
+  overlay.classList.toggle("armed", on);
+  zoomTool.classList.toggle("active", on);
+  hint.textContent = on ? HINT_ARMED : HINT_IDLE;
+}
+
+zoomTool.addEventListener("click", function () {
+  setArmed(!overlay.classList.contains("armed"));
+});
+
+/* ---- Reset view: reload the active map to its starting extent ---- */
+document.getElementById("resetView").addEventListener("click", function () {
+  setArmed(false);
+  const frame = frames[activeKey];
+  try {
+    frame.contentWindow.location.reload();
+  } catch (err) {
+    frame.src = frame.src;
+  }
+});
+
 overlay.addEventListener("mousedown", function (event) {
+  if (!overlay.classList.contains("armed")) return;
   dragging = true;
   const rect = overlay.getBoundingClientRect();
   startX = event.clientX - rect.left;
@@ -395,20 +448,15 @@ function endMarquee(event) {
   if (!dragging) return;
   dragging = false;
   marqueeBox.style.display = "none";
-
   const rect = overlay.getBoundingClientRect();
   const endX = event.clientX - rect.left;
   const endY = event.clientY - rect.top;
-
   const dx = Math.abs(endX - startX);
   const dy = Math.abs(endY - startY);
-
+  setArmed(false);
   const map = getLeafletMap(frames[activeKey]);
   if (!map) return;
-
-  /* A tiny drag is treated as a click and ignored, keeping clicks minimal. */
   if (dx < 8 || dy < 8) return;
-
   const p1 = map.containerPointToLatLng([Math.min(startX, endX), Math.min(startY, endY)]);
   const p2 = map.containerPointToLatLng([Math.max(startX, endX), Math.max(startY, endY)]);
   map.fitBounds([[p1.lat, p1.lng], [p2.lat, p2.lng]]);
@@ -429,8 +477,8 @@ document.querySelectorAll(".info-btn").forEach(function (btn) {
     popoverBody.innerHTML =
       "<h4>" + info.title + "</h4>" +
       "<div class='years'>Years: " + info.years + "</div>" +
-      "<p>" + info.body + "</p>";
-
+      "<p>" + info.body + "</p>" +
+      "<p><a href='" + info.source + "' target='_blank' rel='noopener'>" + info.sourceLabel + "</a></p>";
     const rect = btn.getBoundingClientRect();
     popover.style.display = "block";
     popover.style.top = (rect.bottom + 8) + "px";
@@ -451,19 +499,13 @@ document.addEventListener("click", function (event) {
 
 /* =====================================================================
    FUNGAL NETWORK COUNT
-   ---------------------------------------------------------------------
-   Counts how many distinct fungal networks exist by treating every
-   drawn edge in the fungal map as a connection between two points and
-   counting the connected graphs with a union find structure.
-
-   Two points are the same node when their rounded coordinates match.
-   The count is the number of connected components that contain at
-   least one real edge.
+   Counts distinct connected components (union find) from polyline
+   edges in map2_fungal_network.html.
    ===================================================================== */
 function countFungalNetworks(mapHtml) {
   const edgeBlocks = mapHtml.match(/L\.polyline\(\s*\[\[[^;]*?\]\]/g) || [];
-
   const parent = {};
+
   function find(node) {
     if (parent[node] === undefined) parent[node] = node;
     while (parent[node] !== node) {
@@ -472,6 +514,7 @@ function countFungalNetworks(mapHtml) {
     }
     return node;
   }
+
   function union(a, b) {
     parent[find(a)] = find(b);
   }
@@ -481,14 +524,10 @@ function countFungalNetworks(mapHtml) {
   edgeBlocks.forEach(function (block) {
     const nums = block.match(/-?\d+\.\d+/g);
     if (!nums || nums.length < 4) return;
-
     const points = [];
     for (let i = 0; i + 1 < nums.length; i += 2) {
-      const lat = Number(nums[i]).toFixed(6);
-      const lng = Number(nums[i + 1]).toFixed(6);
-      points.push(lat + "," + lng);
+      points.push(Number(nums[i]).toFixed(6) + "," + Number(nums[i + 1]).toFixed(6));
     }
-
     for (let i = 0; i < points.length - 1; i++) {
       if (points[i] === points[i + 1]) continue;
       nodes.add(points[i]);
@@ -502,12 +541,10 @@ function countFungalNetworks(mapHtml) {
   return roots.size;
 }
 
-/* Load the fungal map source, count the networks, show the result. */
 fetch("map2_fungal_network.html")
-  .then(function (response) { return response.text(); })
+  .then(function (r) { return r.text(); })
   .then(function (html) {
-    const count = countFungalNetworks(html);
-    document.getElementById("meta-network-count").textContent = count;
+    document.getElementById("meta-network-count").textContent = countFungalNetworks(html);
   })
   .catch(function () {
     document.getElementById("meta-network-count").textContent = "unavailable";
