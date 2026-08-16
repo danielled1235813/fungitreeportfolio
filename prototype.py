@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Belowground prototype — produces three mycorrhizal network maps.
+Belowground prototype - produces three mycorrhizal network maps.
 
 Map 1  map1_suitability.html     Habitat suitability heatmap
 Map 2  map2_fungal_network.html  Inferred underground fungal connectivity
@@ -14,11 +14,13 @@ suitability surface from Map 1.
 """
 
 import math
+import colorsys
 import warnings
+from collections import Counter
 import pandas as pd
 import numpy as np
 import folium
-from folium.plugins import HeatMap
+from folium.plugins import HeatMap, FastMarkerCluster
 from scipy.spatial import cKDTree
 
 warnings.filterwarnings("ignore")
@@ -35,8 +37,8 @@ TREE_RADIUS_MULT = 1.5 # tree-fungi search radius = fungal radius × this
 MAP2_THRESHOLD = 0.15  # min edge probability to draw on Map 2
 MAP3_THRESHOLD = 0.10  # min edge probability to draw on Map 3
 
-MAX_TREE_MARKERS = 2000   # max tree dots per guild on Map 1 (performance)
-MAX_TREES_NETWORK = 4000  # max trees considered per park/guild in Map 3
+MAX_TREE_MARKERS = 2000   # kept for reference; Map 1 now shows all host trees
+MAX_TREES_NETWORK = 100000  # effectively uncapped: consider every tree per park/guild
 
 MAP_CENTER = [40.72, -73.96]
 
@@ -164,65 +166,77 @@ def load_and_enrich():
     print(f"  Trees: {len(trees):,}  |  {trees['myco_type'].value_counts().to_dict()}")
     return fungi, trees
 
-# ── Map 1 — Habitat Suitability ───────────────────────────────────────────────
+def network_palette(n):
+    """n visually distinct hex colors, spread around the wheel by golden ratio."""
+    cols = []
+    for i in range(max(n, 1)):
+        h = (i * 0.6180339887) % 1.0
+        r, g, b = colorsys.hsv_to_rgb(h, 0.62, 0.88)
+        cols.append("#%02x%02x%02x" % (int(r * 255), int(g * 255), int(b * 255)))
+    return cols
+
+
+# ── Map 1 - Habitat Suitability ───────────────────────────────────────────────
 
 def build_map1(fungi, trees):
-    print("\nMap 1 — Habitat Suitability Heatmap")
+    print("\nMap 1 - Habitat Suitability Heatmap")
 
     myco_f  = fungi[fungi["guild"].isin(["ectomycorrhizal", "arbuscular_mycorrhizal"])]
     ecm_t   = trees[trees["myco_type"] == "ECM"]
     am_t    = trees[trees["myco_type"] == "AM"]
     print(f"  Mycorrhizal fungi: {len(myco_f):,}  ECM trees: {len(ecm_t):,}  AM trees: {len(am_t):,}")
 
-    m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles="CartoDB dark_matter")
+    # prefer_canvas renders the full tree layer fast even at 20k+ points.
+    m = folium.Map(location=MAP_CENTER, zoom_start=12,
+                   tiles="CartoDB dark_matter", prefer_canvas=True)
 
-    # Suitability proxy: density of mycorrhizal fungal observations
+    # Suitability proxy: density of mycorrhizal fungal observations.
     heat_pts = myco_f[["latitude", "longitude"]].values.tolist()
     if heat_pts:
         HeatMap(
             heat_pts,
             name="Suitability proxy (mycorrhizal observation density)",
-            min_opacity=0.25,
-            radius=22,
-            blur=18,
-            gradient={0.2: "#0d47a1", 0.4: "#00c853", 0.65: "#ffeb3b", 0.85: "#ff6d00", 1.0: "#b71c1c"},
+            min_opacity=0.25, radius=22, blur=18,
+            gradient={0.2: "#0d47a1", 0.4: "#00c853", 0.65: "#ffeb3b",
+                      0.85: "#ff6d00", 1.0: "#b71c1c"},
         ).add_to(m)
 
-    # ECM host trees — sample for performance
-    ecm_sample = ecm_t.sample(min(MAX_TREE_MARKERS, len(ecm_t)), random_state=42)
-    ecm_layer = folium.FeatureGroup(name=f"ECM host trees (sample n={len(ecm_sample):,})", show=True)
-    for _, r in ecm_sample.iterrows():
+    # ALL ECM host trees, no sampling.
+    ecm_layer = folium.FeatureGroup(name=f"ECM host trees ({len(ecm_t):,})", show=True)
+    for _, r in ecm_t.iterrows():
         folium.CircleMarker(
-            [r["lat"], r["lon"]], radius=3,
-            color="#4fc3f7", fill=True, fill_opacity=0.65, weight=0,
+            [r["lat"], r["lon"]], radius=2,
+            color="#4fc3f7", fill=True, fill_color="#4fc3f7",
+            fill_opacity=0.6, weight=0,
             tooltip=r.get("species_latin") or "ECM tree",
         ).add_to(ecm_layer)
     ecm_layer.add_to(m)
 
-    # AM host trees — sample for performance
-    am_sample = am_t.sample(min(MAX_TREE_MARKERS, len(am_t)), random_state=42)
-    am_layer = folium.FeatureGroup(name=f"AM host trees (sample n={len(am_sample):,})", show=False)
-    for _, r in am_sample.iterrows():
+    # ALL AM host trees, no sampling.
+    am_layer = folium.FeatureGroup(name=f"AM host trees ({len(am_t):,})", show=True)
+    for _, r in am_t.iterrows():
         folium.CircleMarker(
-            [r["lat"], r["lon"]], radius=3,
-            color="#81c784", fill=True, fill_opacity=0.65, weight=0,
+            [r["lat"], r["lon"]], radius=2,
+            color="#81c784", fill=True, fill_color="#81c784",
+            fill_opacity=0.6, weight=0,
             tooltip=r.get("species_latin") or "AM tree",
         ).add_to(am_layer)
     am_layer.add_to(m)
 
-    folium.LayerControl().add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
 
-    m.get_root().html.add_child(folium.Element("""
+    m.get_root().html.add_child(folium.Element(f"""
     <div style="position:fixed;bottom:30px;left:30px;z-index:9999;
                 background:rgba(0,0,0,0.82);padding:14px 18px;border-radius:8px;
                 color:white;font-family:sans-serif;font-size:13px;line-height:1.6">
-      <b>Map 1 — Habitat Suitability</b><br>
-      <span style="color:#b71c1c">■</span> High suitability<br>
-      <span style="color:#ff6d00">■</span> Moderate<br>
-      <span style="color:#ffeb3b">■</span> Low<br>
-      <span style="color:#0d47a1">■</span> Minimal signal<br><br>
-      <span style="color:#4fc3f7">●</span> ECM host trees<br>
-      <span style="color:#81c784">●</span> AM host trees<br><br>
+      <b>Map 1 - Habitat Suitability</b><br>
+      <span style="color:#b71c1c">&#9632;</span> High suitability<br>
+      <span style="color:#ff6d00">&#9632;</span> Moderate<br>
+      <span style="color:#ffeb3b">&#9632;</span> Low<br>
+      <span style="color:#0d47a1">&#9632;</span> Minimal signal<br><br>
+      <span style="color:#4fc3f7">&#9679;</span> ECM host trees ({len(ecm_t):,})<br>
+      <span style="color:#81c784">&#9679;</span> AM host trees ({len(am_t):,})<br>
+      <span style="font-size:11px;color:#cfcfcf">All {len(ecm_t) + len(am_t):,} host trees shown (no sampling).</span><br><br>
       <i style="font-size:11px">Proxy: iNaturalist mycorrhizal<br>
       observation density. Soil chemistry<br>
       + microBIOMETER data will replace<br>
@@ -230,9 +244,9 @@ def build_map1(fungi, trees):
     </div>"""))
 
     m.save("map1_suitability.html")
-    print("  → map1_suitability.html")
+    print(f"  -> map1_suitability.html  ({len(ecm_t) + len(am_t):,} host trees)")
 
-# ── Map 2 — Fungal Network ────────────────────────────────────────────────────
+# ── Map 2 - Fungal Network ────────────────────────────────────────────────────
 
 def fungal_edges_for_park(df, guild, radius_m):
     """
@@ -269,7 +283,7 @@ def fungal_edges_for_park(df, guild, radius_m):
     return edges
 
 def build_map2(fungi):
-    print("\nMap 2 — Underground Fungal Network")
+    print("\nMap 2 - Underground Fungal Network")
 
     ecm = fungi[fungi["guild"] == "ectomycorrhizal"]
     am  = fungi[fungi["guild"] == "arbuscular_mycorrhizal"]
@@ -285,74 +299,109 @@ def build_map2(fungi):
         all_edges.extend(am_edges)
         print(f"  {park}: {len(ecm_edges):,} ECM edges, {len(am_edges):,} AM edges")
 
+    # Group fungi into networks (connected components) so color means network.
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    def key(lat, lon):
+        return (round(lat, 5), round(lon, 5))
+
+    for e in all_edges:
+        union(key(e["lat_a"], e["lon_a"]), key(e["lat_b"], e["lon_b"]))
+
+    comp_size = Counter(find(n) for n in parent)
+    roots_sorted = [root for root, _ in comp_size.most_common()]
+    palette = network_palette(len(roots_sorted))
+    root_color = {root: palette[i] for i, root in enumerate(roots_sorted)}
+    n_networks = len(roots_sorted)
+    connected = set(parent.keys())
+
     m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles="CartoDB dark_matter")
 
-    # Edge layers
-    ecm_edge_layer = folium.FeatureGroup(name="ECM connections", show=True)
-    am_edge_layer  = folium.FeatureGroup(name="AM connections",  show=True)
+    # Inferred connections, colored by the network they belong to.
+    edge_layer = folium.FeatureGroup(name="Inferred fungal connections", show=True)
     for e in all_edges:
-        color = "#1565c0" if e["guild"] == "ectomycorrhizal" else "#2e7d32"
-        layer = ecm_edge_layer if e["guild"] == "ectomycorrhizal" else am_edge_layer
+        col = root_color[find(key(e["lat_a"], e["lon_a"]))]
         folium.PolyLine(
             [[e["lat_a"], e["lon_a"]], [e["lat_b"], e["lon_b"]]],
-            color=color, weight=1.5,
-            opacity=min(e["probability"], 0.9),
-            tooltip=(f"{e['taxon_a'] or '?'} ↔ {e['taxon_b'] or '?'}  "
+            color=col, weight=2, opacity=min(e["probability"] + 0.3, 0.9),
+            tooltip=(f"{e['taxon_a'] or '?'} to {e['taxon_b'] or '?'}  "
                      f"P={e['probability']}  {e['distance_m']}m"),
-        ).add_to(layer)
-    ecm_edge_layer.add_to(m)
-    am_edge_layer.add_to(m)
+        ).add_to(edge_layer)
+    edge_layer.add_to(m)
 
-    # Observation point layers
-    ecm_pt_layer = folium.FeatureGroup(name="ECM fruiting bodies", show=True)
-    am_pt_layer  = folium.FeatureGroup(name="AM fruiting bodies",  show=True)
-    for _, r in ecm.iterrows():
-        folium.CircleMarker(
-            [r["latitude"], r["longitude"]], radius=4,
-            color="#42a5f5", fill=True, fill_opacity=0.8, weight=0.5,
-            tooltip=f"{r.get('taxon_name','')}  ({r.get('quality_grade','')})",
-        ).add_to(ecm_pt_layer)
-    for _, r in am.iterrows():
-        folium.CircleMarker(
-            [r["latitude"], r["longitude"]], radius=4,
-            color="#66bb6a", fill=True, fill_opacity=0.8, weight=0.5,
-            tooltip=f"{r.get('taxon_name','')}  ({r.get('quality_grade','')})",
-        ).add_to(am_pt_layer)
-    ecm_pt_layer.add_to(m)
-    am_pt_layer.add_to(m)
+    # Fungi that belong to a network, filled with their network color.
+    net_layer = folium.FeatureGroup(name="Fungi in a network (colored)", show=True)
+    # Fungi with no inferred link, gray and off by default so networks stand out.
+    iso_layer = folium.FeatureGroup(name="Unconnected fungi (gray)", show=False)
+    for _, r in pd.concat([ecm, am]).iterrows():
+        k = key(r["latitude"], r["longitude"])
+        label = f"{r.get('taxon_name','')}  ({r.get('quality_grade','')})"
+        if k in connected:
+            root = find(k)
+            folium.CircleMarker(
+                [r["latitude"], r["longitude"]], radius=5,
+                color="#ffffff", weight=0.5, fill=True,
+                fill_color=root_color[root], fill_opacity=0.95,
+                tooltip=f"{label} | network of {comp_size[root]} fungi",
+            ).add_to(net_layer)
+        else:
+            folium.CircleMarker(
+                [r["latitude"], r["longitude"]], radius=3,
+                color="#888888", weight=0, fill=True,
+                fill_color="#888888", fill_opacity=0.45,
+                tooltip=f"{label} | not in a network",
+            ).add_to(iso_layer)
+    net_layer.add_to(m)
+    iso_layer.add_to(m)
 
-    folium.LayerControl().add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
+
+    if connected:
+        lats = [c[0] for c in connected]
+        lons = [c[1] for c in connected]
+        m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]])
 
     m.get_root().html.add_child(folium.Element(f"""
     <div style="position:fixed;bottom:30px;left:30px;z-index:9999;
                 background:rgba(0,0,0,0.82);padding:14px 18px;border-radius:8px;
                 color:white;font-family:sans-serif;font-size:13px;line-height:1.6">
-      <b>Map 2 — Underground Fungal Network</b><br>
+      <b>Map 2 - Underground Fungal Network</b><br>
       <i style="font-size:11px">Are these fruiting bodies connected below ground?</i><br><br>
-      <span style="color:#42a5f5">●</span> ECM fruiting body<br>
-      <span style="color:#66bb6a">●</span> AM fruiting body<br><br>
-      <span style="color:#1565c0">—</span> ECM inferred connection<br>
-      <span style="color:#2e7d32">—</span> AM inferred connection<br><br>
-      Total edges: {len(all_edges):,}  (P ≥ {MAP2_THRESHOLD})<br>
-      Line opacity = probability<br><br>
-      <i style="font-size:11px">Speculative. Same-individual vs<br>
-      same-network indistinguishable<br>
-      without genetic analysis.</i>
+      <b>Each color = one fungal network.</b><br>
+      <span style="font-size:11px;color:#cfcfcf">Fungi of the same color are inferred to<br>
+      share an underground network. Gray fungi<br>
+      are not linked to any other (toggle on at right).</span><br><br>
+      <b>{n_networks}</b> distinct networks<br>
+      <b>{len(connected):,}</b> connected fungi of {len(ecm) + len(am):,} total<br>
+      <b>{len(all_edges):,}</b> inferred links (P &gt;= {MAP2_THRESHOLD})<br>
+      <span style="font-size:11px;color:#cfcfcf">Line opacity scales with probability.</span><br><br>
+      <i style="font-size:11px">Speculative. Same-individual vs same-network<br>
+      cannot be told apart without genetic analysis.</i>
     </div>"""))
 
     m.save("map2_fungal_network.html")
-    print(f"  → map2_fungal_network.html  ({len(all_edges):,} edges total)")
+    print(f"  -> map2_fungal_network.html  ({len(all_edges):,} edges, {n_networks} networks)")
 
-# ── Map 3 — Tree-to-Tree Network ──────────────────────────────────────────────
+# ── Map 3 - Tree-to-Tree Network ──────────────────────────────────────────────
 
 def tree_edges_for_park(park_trees, park_fungi, guild, radius_m):
     """
     For trees and guild-compatible fungi in one park, compute tree-to-tree
     edge probabilities using the complement-product formula:
 
-        P(T1–T2 connected) = 1 − ∏(1 − p_i)
+        P(T1-T2 connected) = 1 - product(1 - p_i)
 
-    where p_i = exp(−d(T1,F)/r) × exp(−d(T2,F)/r) × quality(F)
+    where p_i = exp(-d(T1,F)/r) × exp(-d(T2,F)/r) × quality(F)
     for each shared fungus F within radius of both trees.
     """
     if len(park_trees) < 2 or len(park_fungi) < 1:
@@ -385,7 +434,7 @@ def tree_edges_for_park(park_trees, park_fungi, guild, radius_m):
         for f_idx in f_list:
             fungi_to_trees.setdefault(f_idx, []).append(t_idx)
 
-    # Find all tree pairs sharing ≥1 fungus
+    # Find all tree pairs sharing >=1 fungus
     tree_pair_fungi: dict[tuple, list[int]] = {}
     for f_idx, t_list in fungi_to_trees.items():
         t_sorted = sorted(t_list)
@@ -404,7 +453,7 @@ def tree_edges_for_park(park_trees, park_fungi, guild, radius_m):
         if tree_dist > 200:
             continue
 
-        # 1 − ∏(1 − p_i) over all shared fungi
+        # 1 - product(1 - p_i) over all shared fungi
         p_disconnect = 1.0
         for f_idx in shared:
             f = fungi_reset.iloc[f_idx]
@@ -430,7 +479,7 @@ def tree_edges_for_park(park_trees, park_fungi, guild, radius_m):
     return edges
 
 def build_map3(fungi, trees):
-    print("\nMap 3 — Tree-to-Tree Network")
+    print("\nMap 3 - Tree-to-Tree Network")
 
     ecm_f = fungi[fungi["guild"] == "ectomycorrhizal"]
     am_f  = fungi[fungi["guild"] == "arbuscular_mycorrhizal"]
@@ -446,81 +495,124 @@ def build_map3(fungi, trees):
         ]:
             edges = tree_edges_for_park(pt, pf, guild, r)
             all_edges.extend(edges)
-            print(f"    {guild}: {len(pt):,} trees, {len(pf):,} fungi → {len(edges):,} tree edges")
+            print(f"    {guild}: {len(pt):,} trees, {len(pf):,} fungi -> {len(edges):,} tree edges")
 
-    # Collect coordinates of connected trees for node rendering
-    connected = set()
+    # Group connected trees into networks (union-find); one color per network.
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    def key(lat, lon):
+        return (round(lat, 5), round(lon, 5))
+
     for e in all_edges:
-        connected.add((round(e["lat_a"], 5), round(e["lon_a"], 5), e["guild"]))
-        connected.add((round(e["lat_b"], 5), round(e["lon_b"], 5), e["guild"]))
+        union(key(e["lat_a"], e["lon_a"]), key(e["lat_b"], e["lon_b"]))
 
-    m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles="CartoDB positron")
+    comp_size = Counter(find(n) for n in parent)
+    roots_sorted = [root for root, _ in comp_size.most_common()]
+    palette = network_palette(len(roots_sorted))
+    root_color = {root: palette[i] for i, root in enumerate(roots_sorted)}
+    n_networks = len(roots_sorted)
+    connected = set(parent.keys())
 
-    # Edge layers
-    ecm_edge_layer = folium.FeatureGroup(name="ECM tree connections", show=True)
-    am_edge_layer  = folium.FeatureGroup(name="AM tree connections",  show=True)
+    # Light basemap keeps Map 3 distinct; canvas keeps the context layer fast.
+    m = folium.Map(location=MAP_CENTER, zoom_start=12,
+                   tiles="CartoDB positron", prefer_canvas=True)
+
+    # CONTEXT: every host tree as a faint gray dot behind the network, so the
+    # colored networks sit inside the full tree population. FastMarkerCluster
+    # keeps the file small; it splits into individual dots once you zoom in.
+    context = [[r["lat"], r["lon"]] for _, r in ecm_t.iterrows()]
+    context += [[r["lat"], r["lon"]] for _, r in am_t.iterrows()]
+    ctx_callback = (
+        "function(row){return L.circleMarker([row[0],row[1]],"
+        "{radius:2,color:'#9aa0a6',weight:0,fillColor:'#9aa0a6',fillOpacity:0.55});}"
+    )
+    ctx_cluster = (
+        "function(cluster){var n=cluster.getChildCount();"
+        "var s=n<100?26:(n<1000?34:44);"
+        "return L.divIcon({html:'<div style=\"background:rgba(130,130,130,0.5);"
+        "width:'+s+'px;height:'+s+'px;border-radius:50%;border:1px solid #eee;"
+        "display:flex;align-items:center;justify-content:center;color:white;"
+        "font-family:sans-serif;font-size:11px\">'+n+'</div>',"
+        "className:'',iconSize:L.point(s,s)});}"
+    )
+    FastMarkerCluster(
+        context, callback=ctx_callback, icon_create_function=ctx_cluster,
+        name=f"All host trees (context, {len(context):,})", show=True,
+        disableClusteringAtZoom=14, maxClusterRadius=50,
+    ).add_to(m)
+
+    # Links, colored by network, faint so the tree nodes read on top.
+    edge_layer = folium.FeatureGroup(name="Fungal links between trees", show=True)
     for e in all_edges:
-        color = "#0d47a1" if e["guild"] == "ECM" else "#1b5e20"
-        layer = ecm_edge_layer if e["guild"] == "ECM" else am_edge_layer
         folium.PolyLine(
             [[e["lat_a"], e["lon_a"]], [e["lat_b"], e["lon_b"]]],
-            color=color, weight=2,
-            opacity=min(e["probability"] * 1.4, 0.85),
-            tooltip=(f"{e['species_a'] or 'tree'} ↔ {e['species_b'] or 'tree'}  "
-                     f"P={e['probability']}  "
-                     f"{e['shared_fungi']} shared fungi  "
+            color=root_color[find(key(e["lat_a"], e["lon_a"]))],
+            weight=1, opacity=0.3,
+            tooltip=(f"{e['species_a'] or 'tree'} to {e['species_b'] or 'tree'}  "
+                     f"P={e['probability']}  {e['shared_fungi']} shared fungi  "
                      f"{e['tree_dist_m']}m"),
-        ).add_to(layer)
-    ecm_edge_layer.add_to(m)
-    am_edge_layer.add_to(m)
+        ).add_to(edge_layer)
+    edge_layer.add_to(m)
 
-    # Node layers — only draw trees that appear in at least one edge
-    ecm_node_layer = folium.FeatureGroup(name="ECM trees (connected)", show=True)
-    am_node_layer  = folium.FeatureGroup(name="AM trees (connected)",  show=True)
-
-    for _, r in ecm_t.iterrows():
-        if (round(r["lat"], 5), round(r["lon"], 5), "ECM") in connected:
+    # Connected trees, filled with their network color.
+    node_layer = folium.FeatureGroup(name="Connected trees (colored by network)", show=True)
+    node_pts = []
+    for _, r in pd.concat([ecm_t, am_t]).iterrows():
+        k = key(r["lat"], r["lon"])
+        if k in connected:
+            root = find(k)
+            node_pts.append((r["lat"], r["lon"], r["park_key"]))
             folium.CircleMarker(
-                [r["lat"], r["lon"]], radius=5,
-                color="#1565c0", fill=True, fill_color="#42a5f5",
-                fill_opacity=0.85, weight=1,
-                tooltip=r.get("species_latin") or "ECM tree",
-            ).add_to(ecm_node_layer)
+                [r["lat"], r["lon"]], radius=5, color="#333333", weight=0.5,
+                fill=True, fill_color=root_color[root], fill_opacity=0.9,
+                tooltip=f"{r.get('species_latin') or 'tree'} | network of {comp_size[root]:,} trees",
+            ).add_to(node_layer)
+    node_layer.add_to(m)
 
-    for _, r in am_t.iterrows():
-        if (round(r["lat"], 5), round(r["lon"], 5), "AM") in connected:
-            folium.CircleMarker(
-                [r["lat"], r["lon"]], radius=5,
-                color="#2e7d32", fill=True, fill_color="#66bb6a",
-                fill_opacity=0.85, weight=1,
-                tooltip=r.get("species_latin") or "AM tree",
-            ).add_to(am_node_layer)
+    folium.LayerControl(collapsed=False).add_to(m)
 
-    ecm_node_layer.add_to(m)
-    am_node_layer.add_to(m)
-    folium.LayerControl().add_to(m)
+    # Auto-zoom to the dense core (Prospect holds ~95% of the connected trees).
+    core = [(lat, lon) for lat, lon, pk in node_pts if pk == "Prospect"]
+    if not core:
+        core = [(lat, lon) for lat, lon, pk in node_pts]
+    if core:
+        lats = [c[0] for c in core]
+        lons = [c[1] for c in core]
+        m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]])
 
     m.get_root().html.add_child(folium.Element(f"""
     <div style="position:fixed;bottom:30px;left:30px;z-index:9999;
-                background:rgba(255,255,255,0.93);padding:14px 18px;border-radius:8px;
+                background:rgba(255,255,255,0.95);padding:14px 18px;border-radius:8px;
                 color:#222;font-family:sans-serif;font-size:13px;line-height:1.6;
-                border:1px solid #ccc">
-      <b>Map 3 — Tree-to-Tree Network</b><br>
-      <i style="font-size:11px">Trees connected via shared fungal networks</i><br><br>
-      <span style="color:#1565c0">●</span> ECM tree (connected node)<br>
-      <span style="color:#2e7d32">●</span> AM tree (connected node)<br><br>
-      <span style="color:#0d47a1">—</span> ECM connection<br>
-      <span style="color:#1b5e20">—</span> AM connection<br><br>
-      Tree-tree edges: {len(all_edges):,}  (P ≥ {MAP3_THRESHOLD})<br>
-      Connected nodes: {len(connected):,}<br><br>
-      <i style="font-size:11px">Speculative. Hover edges for species,<br>
-      probability, shared fungi count.<br>
-      Field data will adjust edge weights<br>
-      once integrated.</i>
+                border:1px solid #ccc;box-shadow:0 1px 6px rgba(0,0,0,0.2)">
+      <b>Map 3 - Tree-to-Tree Network</b><br>
+      <i style="font-size:11px">Only trees linked to another tree through a shared fungus</i><br><br>
+      <b>Each color = one underground network.</b><br>
+      <span style="font-size:11px;color:#555">Same color means those trees connect<br>
+      to each other; different colors are separate networks.</span><br><br>
+      <b>{n_networks}</b> distinct networks<br>
+      <b>{len(node_pts):,}</b> connected trees<br>
+      <b>{len(all_edges):,}</b> fungal links (P &gt;= {MAP3_THRESHOLD})<br>
+      <span style="font-size:11px;color:#777">Gray dots = all {len(context):,} host trees<br>
+      (context). Toggle at right. Colors sit on top.</span><br><br>
+      <i style="font-size:11px">All links are ECM; AM fungi are rarely<br>
+      seen above ground. Speculative until field data.</i>
     </div>"""))
 
     m.save("map3_tree_network.html")
-    print(f"  → map3_tree_network.html  ({len(all_edges):,} edges, {len(connected):,} nodes)")
+    print(f"  -> map3_tree_network.html  ({len(all_edges):,} edges, "
+          f"{len(node_pts):,} connected trees, {n_networks} networks, "
+          f"{len(context):,} context trees)")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -530,6 +622,6 @@ if __name__ == "__main__":
     build_map2(fungi)
     build_map3(fungi, trees)
     print("\nDone.")
-    print("  map1_suitability.html   — habitat suitability heatmap")
-    print("  map2_fungal_network.html — inferred underground fungal connectivity")
-    print("  map3_tree_network.html   — tree-to-tree network via shared fungi")
+    print("  map1_suitability.html   - habitat suitability heatmap")
+    print("  map2_fungal_network.html - inferred underground fungal connectivity")
+    print("  map3_tree_network.html   - tree-to-tree network via shared fungi")
