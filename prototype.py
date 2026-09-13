@@ -42,6 +42,20 @@ MAX_TREES_NETWORK = 100000  # effectively uncapped: consider every tree per park
 
 MAP_CENTER = [40.72, -73.96]
 
+# Basemaps: Esri gray canvas (keyless). CartoDB now stamps "API KEY REQUIRED"
+# on its free tiles when loaded from a browser, so we avoid it.
+ESRI_DARK  = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+ESRI_LIGHT = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+ESRI_ATTR  = "Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors"
+
+
+def add_basemap(m, url):
+    """Add a keyless Esri basemap. max_native_zoom=16 upscales past its top zoom."""
+    folium.TileLayer(
+        tiles=url, attr=ESRI_ATTR, name="Basemap",
+        max_native_zoom=16, max_zoom=20, control=False,
+    ).add_to(m)
+
 # ── Guild lookup (placeholder for FungalTraits join) ──────────────────────────
 # Source: known ecology of genera commonly observed in northeastern US parks.
 # Replace with FungalTraits primary_lifestyle join once data is available.
@@ -187,8 +201,8 @@ def build_map1(fungi, trees):
     print(f"  Mycorrhizal fungi: {len(myco_f):,}  ECM trees: {len(ecm_t):,}  AM trees: {len(am_t):,}")
 
     # prefer_canvas renders the full tree layer fast even at 20k+ points.
-    m = folium.Map(location=MAP_CENTER, zoom_start=12,
-                   tiles="CartoDB dark_matter", prefer_canvas=True)
+    m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles=None, prefer_canvas=True)
+    add_basemap(m, ESRI_DARK)
 
     # Suitability proxy: density of mycorrhizal fungal observations.
     heat_pts = myco_f[["latitude", "longitude"]].values.tolist()
@@ -325,7 +339,8 @@ def build_map2(fungi):
     n_networks = len(roots_sorted)
     connected = set(parent.keys())
 
-    m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles="CartoDB dark_matter")
+    m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles=None)
+    add_basemap(m, ESRI_DARK)
 
     # Inferred connections, colored by the network they belong to.
     edge_layer = folium.FeatureGroup(name="Inferred fungal connections", show=True)
@@ -524,8 +539,8 @@ def build_map3(fungi, trees):
     connected = set(parent.keys())
 
     # Light basemap keeps Map 3 distinct; canvas keeps the context layer fast.
-    m = folium.Map(location=MAP_CENTER, zoom_start=12,
-                   tiles="CartoDB positron", prefer_canvas=True)
+    m = folium.Map(location=MAP_CENTER, zoom_start=12, tiles=None, prefer_canvas=True)
+    add_basemap(m, ESRI_LIGHT)
 
     # CONTEXT: every host tree as a faint gray dot behind the network, so the
     # colored networks sit inside the full tree population. FastMarkerCluster
